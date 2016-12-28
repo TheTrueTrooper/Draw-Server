@@ -1,0 +1,174 @@
+﻿using mdtypes;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Sockets;
+using System.Runtime.Serialization;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace AngeloSanchesCMPE2800Sever
+{
+    internal enum DisconnectType
+    {
+        Hard,
+        Soft
+    }
+
+    internal class ServerClient
+    {
+        Socket CSocket;
+
+        Thread ListenerThread;
+        volatile bool Listening = false;
+        volatile DisconnectType DisConectedVa = DisconnectType.Hard;
+        Form1 Parent;
+
+        volatile int FrameCount = 0;
+        volatile int FragmentCount = 0;
+
+        internal ServerClient(Form1 Parentin, Socket OkSocket)
+        {
+            CSocket = OkSocket;
+            Parent = Parentin;
+            Task.Run(()=>StartThreadListen(CSocket));
+        }
+
+
+
+        /// <summary>
+        /// Starts the thread that will listen for incoming connections, and
+        ///     handle disconnects when the connection is dropped.
+        /// </summary>
+        /// <param name="Ar"></param>
+        void StartThreadListen(Socket Ar)
+        {
+            Listening = true;
+            //this is calledwhen Begin is done
+            ListenerThread = new Thread(new ParameterizedThreadStart(ThreadListen));
+            ListenerThread.IsBackground = true;
+            ListenerThread.Start(this);
+        }
+
+        /// <summary>
+        /// Used for receiving data.
+        /// </summary>
+        /// <param name="In">connection socket</param>
+        static void ThreadListen(object In)
+        {
+            //this will be called by By start StartThreadListen
+            ServerClient ServerClientCon = (ServerClient)In;
+            Queue<LineSegment> Que = ServerClientCon.Parent.SendQue;
+            //listening socket
+            Socket ClientCon;
+
+            ClientCon = ServerClientCon.CSocket;
+
+            //server will drop the client, if there is no response for this
+            // period of time (ms)
+            ClientCon.ReceiveTimeout = 0;
+
+            using (MemoryStream MS = new MemoryStream())
+                while (ServerClientCon.Listening)
+                {
+                    // bte buffer for us to load to
+                    byte[] buffer = new byte[2000];
+                    // the number of bytes that we get back
+                    int BiteCount = 0;
+                    try
+                    {
+                        // get a byte
+                        BiteCount = ClientCon.Receive(buffer);
+                    }
+                    catch (Exception error)
+                    {
+                        // Disconnect
+                        ServerClientCon.DisConectedVa = DisconnectType.Hard;
+                        ServerClientCon.Listening = false;
+                        return;
+                    }
+                    if (BiteCount == 0)
+                    {
+                        ServerClientCon.DisConectedVa = DisconnectType.Soft;
+                        ServerClientCon.Listening = false;
+                        return;
+                    }
+
+
+                    // the last postion to use;
+                    long LastPos = 0;
+                    // a serailization fail reset point
+                    long CurrentTryPos = 0;
+                    try
+                    {
+                        LastPos = MS.Position;
+
+                        MS.Seek(0, SeekOrigin.End);
+
+                        MS.Write(buffer, 0, BiteCount);
+
+                        MS.Position = LastPos;
+                    }
+                    catch (Exception err)
+                    {
+#if DEBUG
+                        Trace.WriteLine($"Datastream error: {err.Message}");
+#endif
+                    }
+
+                    // loop over the newly written data
+                    do
+                    {
+                        //store the postion for rewind
+                        CurrentTryPos = MS.Position;
+                        try
+                        {
+                            //de serializes
+                            LineSegment LS = (LineSegment)Form1.BFormat.Deserialize(MS);
+                            lock (Que)
+                                Que.Enqueue(LS);
+
+
+                            // a full frame was processed
+                            // increment total received frames count
+                            ServerClientCon.FrameCount++;
+                            //lock (Client.SyncLock)
+                            // update the destack avg
+                            //ServerClientCon.DestackAvg = (float)Client.RxFrameCount / Client.RxCount;
+
+
+                        }// may loop for ever look int later <--------------------------------------------------------------------------
+                        catch (SerializationException SE)
+                        {
+                            // if there is an error tell us about it but step back as it is prob fragmentaion
+                            MS.Position = CurrentTryPos;
+
+                            // update fragments count
+                            ServerClientCon.FragmentCount++;
+
+                            // leave the loop
+                            break;
+                        }
+
+                    } while (MS.Position < MS.Length);
+
+                    if (MS.Position == MS.Length)
+                    {
+                        //resset all buffers if able or done
+                        MS.Position = 0;
+                        MS.SetLength(0);
+                    }
+
+
+
+                    Thread.Sleep(0);
+                }
+
+            
+        }
+
+    }
+}

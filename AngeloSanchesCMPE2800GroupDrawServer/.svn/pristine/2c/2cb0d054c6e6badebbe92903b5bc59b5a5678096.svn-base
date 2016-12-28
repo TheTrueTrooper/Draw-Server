@@ -1,0 +1,203 @@
+﻿using mdtypes;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Data;
+using System.Drawing;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace AngeloSanchesCMPE2800Sever
+{
+    public partial class Form1 : Form
+    {
+        List<ServerClient> Clients = new List<ServerClient>();
+
+        internal Queue<LineSegment> SendQue = new Queue<LineSegment>();
+
+        /// <summary>
+        /// Type of socket disconnect.
+        /// </summary>
+        public enum ThreadDisconnectType
+        {
+            Soft,
+            Hard
+        }
+
+
+
+        public delegate void VoidByteArrInt(byte[] buffer, int Count);
+
+        public delegate void VoidStringThreadDisconnectType(string Message, ThreadDisconnectType Type);
+
+        public VoidStringThreadDisconnectType ThreadEndCallBack { private set; get; }
+
+        public VoidByteArrInt HanndelData { private set; get; }
+
+
+
+        internal static BinaryFormatter BFormat = new BinaryFormatter();
+
+        /// <summary>
+        /// True, while the listening socket is connected, receiving data and ListenerThread is running?
+        /// </summary>
+        volatile bool Listening;
+        /// <summary>
+        /// Used to receive data in a blocking call.
+        /// </summary>
+        Thread ListenerThread;
+        /// <summary>
+        /// listening socket to wait for incoming connection requests
+        /// </summary>
+        Socket Listener;
+
+        Socket SendRec;
+
+        Random Rand = new Random();
+
+        int RandomValue = 0;
+
+        public Form1()
+        {
+            InitializeComponent();
+            ThreadEndCallBack = new VoidStringThreadDisconnectType(GetThreadEndCallBackRequest);
+            RandomValue = Rand.Next(1, 1001);
+        }
+
+
+        
+        /// <summary>
+        /// Called on any and all disconnects.  Updates the server form to show
+        ///     that the connection has been lost.  A soft or hard
+        ///     disconnect has occurred.
+        /// </summary>
+        /// <param name="Message">Any message to send</param>
+        /// <param name="Type">Soft or other wise</param>
+        /// 
+        private void GetThreadEndCallBackRequest(string Message, ThreadDisconnectType Type)
+        {
+            
+
+
+            Listener?.Dispose();
+            Listener = null;
+            SendRec?.Dispose();
+            SendRec = null;
+        }
+        
+        
+        private void _Bu_StartServer_Click(object sender, EventArgs e)
+        {
+            //true, if port number was valid
+            bool blnResult = false;
+            //port number to listen on
+            int iPort = 0;
+
+            //Disable the button after press.
+            _Bu_StartServer.Enabled = false;
+
+            //Ensure that a valid port number was received.
+            blnResult = int.TryParse(_TB_ServerPort.Text, out iPort);
+
+            if (!blnResult || iPort < 1)
+            {
+                MessageBox.Show("Port number is invalid.  Please provide a"
+                    + " whole number greater than 0.");
+                return;
+            }
+            //create a listening socket to wait for connection requests
+            try
+            {
+                Listener = new Socket(
+                AddressFamily.InterNetwork, //IP V4 address scheme
+                SocketType.Stream,          //streaming socket (connection based)
+                ProtocolType.Tcp);          //use TCP as protocol
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(String.Format("{0}\nAn exception occurred in the Start"
+                    + " Server button event handler, when initializing"
+                    + " the listening socket.", ex.Message), "Server Exept");
+            }
+            //listen for incoming connections on the specified port
+            try
+            {
+                Listener.Bind(new IPEndPoint(IPAddress.Any, iPort));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(String.Format("{0}\nAn exception occurred in the Start"
+                    + " Server button event handler, when trying to bind the"
+                    + " listening socket to port {1}.", ex.Message, iPort), "Server Exept");
+            }
+            //set the maximum length of the pending connections queue
+            try
+            {
+                Listener.Listen(1);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(String.Format("{0}\nAn exception occurred in the Start"
+                    + " Server button event handler, when setting the pending"
+                    + " connections queue to 1.", ex.Message), "Server Exept");
+            }
+            //invoke the asynchronous made to wait for incoming connections
+            try
+            {
+                Listener.BeginAccept(cbAccept, Listener);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(String.Format("{0}\nAn exception occurred in the Start"
+                    + " Server button event handler, when starting an"
+                    + " asynchronous accept.", ex.Message), "Server Exept");
+            }
+        }
+
+        /// <summary>
+        /// Asynchronous method to handle incoming connection requests.
+        /// </summary>
+        /// <param name="ar"></param>
+        void cbAccept(IAsyncResult ar)
+        {
+            Socket IsOk = (Socket)(ar.AsyncState);
+
+            try
+            {
+                Socket connsok = IsOk.EndAccept(ar);
+                Accept(connsok);
+            }
+            catch (SocketException error)
+            {
+                Error(error.Message);
+            }
+        }
+
+        /// <summary>
+        /// Update the server form to show that a connection has been made.
+        /// </summary>
+        /// <param name="sok">connection socket</param>
+        void Accept(Socket sok)
+        {
+            Clients.Add(new ServerClient(this, sok));
+        }
+        
+
+        /// <summary>
+        /// Update the server form to indicate that an error has occurred.
+        /// </summary>
+        /// <param name="error">error message to display in message box</param>
+        void Error(string error)
+        {
+            MessageBox.Show(error, "Socket Error");
+        }
+
+        
+    }
+}

@@ -1,0 +1,11 @@
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\bin\Debug\CMPE2800DAllanASanchezICA07.exe.config
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\Client.csprojResolveAssemblyReference.cache
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\CMPE2800DAllanASanchezICA07.Connect.resources
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\CMPE2800DAllanASanchezICA07.Main.resources
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\CMPE2800DAllanASanchezICA07.Properties.Resources.resources
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\Client.csproj.GenerateResource.Cache
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\bin\Debug\CMPE2800DAllanASanchezICA07.exe
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\bin\Debug\CMPE2800DAllanASanchezICA07.pdb
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\bin\Debug\mdtypes.dll
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\CMPE2800DAllanASanchezICA07.exe
+C:\Users\Angelo\Documents\Visual Studio 2015\Projects\CMPE2800DAllanASanchezICA07\CMPE2800DAllanASanchezICA07\obj\Debug\CMPE2800DAllanASanchezICA07.pdb

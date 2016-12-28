@@ -1,0 +1,232 @@
+﻿//// by Angelo Sanches
+//// Multi draw Server 
+//// Sunday 9 2016
+using mdtypes;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Sockets;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+
+namespace AngeloSanchesCMPE2800Sever
+{
+
+    internal class ServerClient : IDisposable
+    {
+        /// <summary>
+        /// the send and rec socket set internal so parent can see
+        /// </summary>
+        internal Socket CSocket;
+        /// <summary>
+        /// the Thread that listens
+        /// </summary>
+        Thread RxThread;
+        /// <summary>
+        /// a bool to break form listen loop with socket in thread
+        /// </summary>
+        volatile bool Listening = false;
+        /// <summary>
+        /// our source if we need something up the tree
+        /// </summary>
+        Form1 Parent;
+
+        /// <summary>
+        /// keeps frame count for dispaly
+        /// </summary>
+        internal volatile int FrameCount = 0;
+        /// <summary>
+        /// keeps frame frag count for dispaly
+        /// </summary>
+        internal volatile int FragmentCount = 0;
+        /// <summary>
+        /// keeps Rx rec count for dispaly
+        /// </summary>
+        internal volatile int RxCount = 0;
+
+        /// <summary>
+        /// Constructor
+        /// </summary>
+        /// <param name="Parentin">The Owner of this</param>
+        /// <param name="OkSocket">The socket to use</param>
+        internal ServerClient(Form1 Parentin, Socket OkSocket)
+        {
+            // stor things 
+            CSocket = OkSocket;
+            Parent = Parentin;
+            //then asyn create a thread
+            Task.Run(()=>StartThreadListen(CSocket));
+        }
+
+
+
+        /// <summary>
+        /// Starts the thread that will listen for incoming connections, and
+        ///     handle disconnects when the connection is dropped.
+        /// </summary>
+        void StartThreadListen()
+        {
+            Listening = true;
+            //this is calledwhen Begin is done
+            RxThread = new Thread(new ParameterizedThreadStart(RxThreadFunk));
+            RxThread.IsBackground = true;
+            RxThread.Start(this);
+        }
+
+        /// <summary>
+        /// Used for receiving data.
+        /// </summary>
+        /// <param name="In">connection socket</param>
+        static void RxThreadFunk(object In)
+        {
+            BinaryFormatter BFormat = new BinaryFormatter();
+            //this will be called by By start StartThreadListen
+            ServerClient ServerClientCon = (ServerClient)In;
+            Queue<LineSegment> Que = ServerClientCon.Parent.SendQue;
+            //Queue<byte[]> Que = ServerClientCon.Parent.SendQue;
+            //listening socket
+            Socket ClientCon;
+
+            ClientCon = ServerClientCon.CSocket;
+
+            //server will drop the client, if there is no response for this
+            // period of time (ms)
+            ClientCon.ReceiveTimeout = 0;
+
+            using (MemoryStream MS = new MemoryStream())
+                while (ServerClientCon.Listening)
+                {
+                    // bte buffer for us to load to
+                    byte[] buffer = new byte[2000000];
+                    // the number of bytes that we get back
+                    int BiteCount = 0;
+                    try
+                    {
+                        // get a byte
+                        BiteCount = ClientCon.Receive(buffer);
+                        ServerClientCon.Parent.RxBytCount += BiteCount;
+                        ServerClientCon.RxCount++;
+                    }
+                    catch
+                    {
+                        // Disconnect
+                        ServerClientCon.Parent.CallDisconnectClient(ServerClientCon);
+                        return;
+                    }
+                    if (BiteCount == 0)
+                    {
+                        ServerClientCon.Parent.CallDisconnectClient(ServerClientCon);
+                        return;
+                    }
+
+                    // why bother to Deserialize?
+                    // the last postion to use;
+                    long LastPos = 0;
+                    // a serailization fail reset point
+                    long CurrentTryPos = 0;
+                    try
+                    {
+                        LastPos = MS.Position;
+
+                        MS.Seek(0, SeekOrigin.End);
+
+                        MS.Write(buffer, 0, BiteCount);
+
+                        MS.Position = LastPos;
+                    }
+#if DEBUG
+                    catch (Exception ex)
+#else
+                    catch
+#endif
+                    {
+#if DEBUG
+                        Trace.WriteLine($"Datastream error: {ex.Message}");
+                        ServerClientCon.Parent.CallDisconnectClient(ServerClientCon);
+                        return;
+#endif
+                    }
+                    
+                    // loop over the newly written data
+                    do
+                    {
+                        object check = null;
+                        //store the postion for rewind
+                        CurrentTryPos = MS.Position;
+                        LineSegment LS = null;
+                        try
+                        {
+                            //de serializes
+                            check = BFormat.Deserialize(MS);
+                            if (check is LineSegment)
+                                LS = (LineSegment)check;
+                            else
+                            {
+                                ///DONT GIVE ME BAD DATA DAM IT ot i disconect
+                                ServerClientCon.Parent.CallDisconnectClient(ServerClientCon);
+                                return;
+                            }
+                            ServerClientCon.Parent.RxSegCount ++;
+                            lock (Que)
+                                Que.Enqueue(LS);
+
+
+                            // a full frame was processed
+                            // increment total received frames count
+                            ServerClientCon.FrameCount++;
+                            //lock (Client.SyncLock)
+                            // update the destack avg
+                            //ServerClientCon.DestackAvg = (float)Client.RxFrameCount / Client.RxCount;
+
+
+                        }// may loop for ever look int later <--------------------------------------------------------------------------
+                        catch (SerializationException SE)
+                        {
+                            // if there is an error tell us about it but step back as it is prob fragmentaion
+                            MS.Position = CurrentTryPos;
+
+                            // update fragments count
+                            ServerClientCon.FragmentCount++;
+
+                            // leave the loop
+                            break;
+                        }
+
+                    } while (MS.Position < MS.Length);
+
+                    if (MS.Position == MS.Length)
+                    {
+                        //resset all buffers if able or done
+                        MS.Position = 0;
+                        MS.SetLength(0);
+                    }
+
+
+                    Thread.Sleep(0);
+                }
+
+            
+        }
+        /// <summary>
+        /// disposal to let go of threads and sockets nicely 
+        /// </summary>
+        public void Dispose()
+        {
+            // disconnect
+            CSocket.Disconnect(false);
+            //kill thread nicely in a wait
+            Listening = false;
+            if(RxThread.IsAlive)
+                RxThread.Join();
+            //dispose of the socket
+            CSocket.Dispose();
+        }
+
+
+    }
+}
